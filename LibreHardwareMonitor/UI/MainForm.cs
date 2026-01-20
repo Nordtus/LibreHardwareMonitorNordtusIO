@@ -1183,8 +1183,8 @@ public sealed partial class MainForm : Form
                     string category = tag.Parent?.Text ?? "";
                     string sensor = tag.Text ?? "";
                     string value = tag.Value ?? "";
-                    string min = tag.SerialMin ? (tag.Min ?? "") : "";
-                    string max = tag.SerialMax ? (tag.Max ?? "") : "";
+                    string min = tag.Min_select ? (tag.Min ?? "") : "";
+                    string max = tag.Max_select ? (tag.Max ?? "") : "";
                     string uiElement = tag.UiElement ?? "";
                     string uiDisplay = tag.UiDisplay ?? "";
 
