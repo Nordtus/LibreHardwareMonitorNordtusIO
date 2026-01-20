@@ -21,6 +21,7 @@ public class HardwareNode : Node, IExpandPersistNode
     private bool _expanded;
 
     public event EventHandler PlotSelectionChanged;
+    public event EventHandler SerialSelectionChanged;
 
     public HardwareNode(IHardware hardware, PersistentSettings settings, UnitManager unitManager)
     {
@@ -117,12 +118,14 @@ public class HardwareNode : Node, IExpandPersistNode
                 if (sensorNode != null)
                 {
                     sensorNode.PlotSelectionChanged -= SensorPlotSelectionChanged;
+                    sensorNode.SerialSelectionChanged -= SensorSerialSelectionChanged;
                     typeNode.Nodes.Remove(sensorNode);
                     UpdateNode(typeNode);
                 }
             }
         }
         PlotSelectionChanged?.Invoke(this, null);
+        SerialSelectionChanged?.Invoke(this, null);
     }
 
     private void InsertSorted(Node node, ISensor sensor)
@@ -133,12 +136,18 @@ public class HardwareNode : Node, IExpandPersistNode
 
         SensorNode sensorNode = new SensorNode(sensor, _settings, _unitManager);
         sensorNode.PlotSelectionChanged += SensorPlotSelectionChanged;
+        sensorNode.SerialSelectionChanged += SensorSerialSelectionChanged;
         node.Nodes.Insert(i, sensorNode);
     }
 
     private void SensorPlotSelectionChanged(object sender, EventArgs e)
     {
         PlotSelectionChanged?.Invoke(this, null);
+    }
+
+    private void SensorSerialSelectionChanged(object sender, EventArgs e)
+    {
+        SerialSelectionChanged?.Invoke(this, null);
     }
 
     private void SensorAdded(ISensor sensor)
@@ -153,5 +162,6 @@ public class HardwareNode : Node, IExpandPersistNode
         }
 
         PlotSelectionChanged?.Invoke(this, null);
+        SerialSelectionChanged?.Invoke(this, null);
     }
 }

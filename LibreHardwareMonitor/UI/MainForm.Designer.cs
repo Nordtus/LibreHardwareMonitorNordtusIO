@@ -70,6 +70,7 @@ namespace LibreHardwareMonitor.UI
             this.MenuItem3 = new System.Windows.Forms.ToolStripSeparator();
             this.hiddenMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.plotMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.serialMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.gadgetMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.MenuItem1 = new System.Windows.Forms.ToolStripSeparator();
             this.columnsMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -143,11 +144,15 @@ namespace LibreHardwareMonitor.UI
             this.runWebServerMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.serverInterfacePortMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.authWebServerMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.serialPortServerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.configurationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.runSerialPortServerMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.helpMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.aboutMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.treeContextMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.saveFileDialog = new System.Windows.Forms.SaveFileDialog();
             this.timer = new System.Windows.Forms.Timer(this.components);
+            this.NodeCheckBoxSerial = new Aga.Controls.Tree.NodeControls.NodeCheckBox();
             this.splitContainer = new LibreHardwareMonitor.UI.SplitContainerAdv();
             this.treeView = new Aga.Controls.Tree.TreeViewAdv();
             this.batteryMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -371,6 +376,7 @@ namespace LibreHardwareMonitor.UI
             this.MenuItem3,
             this.hiddenMenuItem,
             this.plotMenuItem,
+            this.serialMenuItem,
             this.gadgetMenuItem,
             this.MenuItem1,
             this.columnsMenuItem});
@@ -422,7 +428,14 @@ namespace LibreHardwareMonitor.UI
             this.plotMenuItem.Name = "plotMenuItem";
             this.plotMenuItem.Size = new System.Drawing.Size(188, 22);
             this.plotMenuItem.Text = "Show Plot";
-            //
+            // 
+            // serialMenuItem
+            // 
+            this.serialMenuItem.Name = "serialMenuItem";
+            this.serialMenuItem.Size = new System.Drawing.Size(188, 22);
+            this.serialMenuItem.Text = "Show Serial Selection";
+            this.serialMenuItem.Click += new System.EventHandler(this.Serial_Select_CheckBox_CheckedChanged);
+            // 
             // gadgetMenuItem
             //
             this.gadgetMenuItem.Name = "gadgetMenuItem";
@@ -482,7 +495,8 @@ namespace LibreHardwareMonitor.UI
             this.fileRotationMethod,
             this.sensorValuesTimeWindowMenuItem,
             this.webMenuItemSeparator,
-            this.webMenuItem});
+            this.webMenuItem,
+            this.serialPortServerToolStripMenuItem});
             this.optionsMenuItem.Name = "optionsMenuItem";
             this.optionsMenuItem.Size = new System.Drawing.Size(61, 20);
             this.optionsMenuItem.Text = "Options";
@@ -990,7 +1004,31 @@ namespace LibreHardwareMonitor.UI
             this.authWebServerMenuItem.Size = new System.Drawing.Size(153, 22);
             this.authWebServerMenuItem.Text = "Authentication";
             this.authWebServerMenuItem.Click += new System.EventHandler(this.AuthWebServerMenuItem_Click);
-            //
+            // 
+            // serialPortServerToolStripMenuItem
+            // 
+            this.serialPortServerToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.configurationToolStripMenuItem,
+            this.runSerialPortServerMenuItem});
+            this.serialPortServerToolStripMenuItem.Name = "serialPortServerToolStripMenuItem";
+            this.serialPortServerToolStripMenuItem.Size = new System.Drawing.Size(222, 22);
+            this.serialPortServerToolStripMenuItem.Text = "Serial Port Server";
+            // 
+            // configurationToolStripMenuItem
+            // 
+            this.configurationToolStripMenuItem.Name = "configurationToolStripMenuItem";
+            this.configurationToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.configurationToolStripMenuItem.Text = "Configuration";
+            this.configurationToolStripMenuItem.Click += new System.EventHandler(this.serialPortMenuItem_Click);
+            // 
+            // runSerialPortServerMenuItem
+            // 
+            this.runSerialPortServerMenuItem.CheckOnClick = true;
+            this.runSerialPortServerMenuItem.Name = "runSerialPortServerMenuItem";
+            this.runSerialPortServerMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.runSerialPortServerMenuItem.Text = "Run";
+            this.runSerialPortServerMenuItem.CheckedChanged += new System.EventHandler(this.Serial_CheckBox_CheckedChanged);
+            // 
             // helpMenuItem
             //
             this.helpMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -1023,7 +1061,14 @@ namespace LibreHardwareMonitor.UI
             //
             this.timer.Interval = 1000;
             this.timer.Tick += new System.EventHandler(this.Timer_Tick);
-            //
+            // 
+            // NodeCheckBoxSerial
+            // 
+            this.NodeCheckBoxSerial.DataPropertyName = "Serial";
+            this.NodeCheckBoxSerial.EditEnabled = true;
+            this.NodeCheckBoxSerial.LeftMargin = 3;
+            this.NodeCheckBoxSerial.ParentColumn = this.value;
+            // 
             // splitContainer
             //
             this.splitContainer.Cursor = System.Windows.Forms.Cursors.Default;
@@ -1066,6 +1111,7 @@ namespace LibreHardwareMonitor.UI
             this.treeView.NodeControls.Add(this.nodeTextBoxValue);
             this.treeView.NodeControls.Add(this.nodeTextBoxMin);
             this.treeView.NodeControls.Add(this.nodeTextBoxMax);
+            this.treeView.NodeControls.Add(this.NodeCheckBoxSerial);
             this.treeView.SelectedNode = null;
             this.treeView.Size = new System.Drawing.Size(386, 354);
             this.treeView.TabIndex = 0;
@@ -1228,6 +1274,11 @@ namespace LibreHardwareMonitor.UI
         private ToolStripRadioButtonMenuItem strokeThickness1ptMenuItem;
         private ToolStripRadioButtonMenuItem strokeThickness2ptMenuItem;
         private ToolStripRadioButtonMenuItem strokeThickness3ptMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem serialPortServerToolStripMenuItem;
+        private Aga.Controls.Tree.NodeControls.NodeCheckBox NodeCheckBoxSerial;
+        private System.Windows.Forms.ToolStripMenuItem configurationToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem serialMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem runSerialPortServerMenuItem;
     }
 }
 

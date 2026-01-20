@@ -19,7 +19,39 @@ public class SensorNode : Node
     private readonly UnitManager _unitManager;
     private Color? _penColor;
     private bool _plot;
+    private bool _serial;
+    private bool _min_select;
+    private bool _max_select;
 
+    public bool SerialMin { get; set; } = false; // default: included
+    public bool SerialMax { get; set; } = false; // default: included
+
+    private string _uiDisplay = "Disp 1";
+    public string UiDisplay
+    {
+        get => _uiDisplay;
+        set
+        {
+            _uiDisplay = value;
+            if (_settings != null)
+                _settings.SetValue($"UiDisplay_{Sensor.Identifier}", value);
+        }
+    }
+
+    private string _uiElement = "El 1";
+    public string UiElement
+    {
+        get => _uiElement;
+        set
+        {
+            _uiElement = value;
+            if (_settings != null)
+                _settings.SetValue($"UiElement_{Sensor.Identifier}", value);
+        }
+    }
+
+    public bool ShowDisplayUIDropdowns { get; set; } = true;
+    
     public SensorNode(ISensor sensor, PersistentSettings settings, UnitManager unitManager)
     {
         Sensor = sensor;
@@ -96,6 +128,12 @@ public class SensorNode : Node
         bool hidden = settings.GetValue(new Identifier(sensor.Identifier, "hidden").ToString(), sensor.IsDefaultHidden);
         base.IsVisible = !hidden;
         Plot = settings.GetValue(new Identifier(sensor.Identifier, "plot").ToString(), false);
+        Serial = settings.GetValue(new Identifier(sensor.Identifier, "serial").ToString(), false);
+        _uiDisplay = _settings?.GetValue($"UiDisplay_{Sensor.Identifier}", "Disp 1") ?? "Disp 1";
+        _uiElement = _settings?.GetValue($"UiElement_{Sensor.Identifier}", "El 1") ?? "El 1";
+        _min_select = _settings.GetValue(new Identifier(sensor.Identifier, "min_select").ToString(), false);
+        _max_select = _settings.GetValue(new Identifier(sensor.Identifier, "max_select").ToString(), false);
+
         string id = new Identifier(sensor.Identifier, "penColor").ToString();
 
         if (settings.Contains(id))
@@ -103,6 +141,9 @@ public class SensorNode : Node
     }
 
     public event EventHandler PlotSelectionChanged;
+    public event EventHandler SerialSelectionChanged;
+    public event EventHandler MinSelectionChanged;
+    public event EventHandler MaxSelectionChanged;
 
     public string Format { get; set; } = "";
 
@@ -140,6 +181,7 @@ public class SensorNode : Node
                 _settings.Remove(id);
 
             PlotSelectionChanged?.Invoke(this, null);
+            SerialSelectionChanged?.Invoke(this, null);
         }
     }
 
@@ -151,6 +193,39 @@ public class SensorNode : Node
             _plot = value;
             _settings.SetValue(new Identifier(Sensor.Identifier, "plot").ToString(), value);
             PlotSelectionChanged?.Invoke(this, null);
+        }
+    }
+
+    public bool Serial //Serial check box
+    {
+        get { return _serial; }
+        set
+        {
+            _serial = value;
+            _settings.SetValue(new Identifier(Sensor.Identifier, "serial").ToString(), value);
+            SerialSelectionChanged?.Invoke(this, null);
+        }
+    }
+
+    public bool Min_select
+    {
+        get { return _min_select; }
+        set
+        {
+            _min_select = value;
+            _settings.SetValue(new Identifier(Sensor.Identifier, "min_select").ToString(), value);
+            MinSelectionChanged?.Invoke(this, null);
+        }
+    }
+
+    public bool Max_select
+    {
+        get { return _max_select; }
+        set
+        {
+            _max_select = value;
+            _settings.SetValue(new Identifier(Sensor.Identifier, "max_select").ToString(), value);
+            MaxSelectionChanged?.Invoke(this, null);
         }
     }
 

@@ -166,4 +166,15 @@ namespace Aga.Controls.Tree.NodeControls
 				IsVisibleValueNeeded(this, args);
 		}
 	}
+    public class NodeControlIsVisibleValueNeededEventArgs : EventArgs
+    {
+        public TreeNodeAdv Node { get; private set; }
+        public bool IsVisible { get; set; }
+
+        public NodeControlIsVisibleValueNeededEventArgs(TreeNodeAdv node)
+        {
+            Node = node;
+            IsVisible = true;
+        }
+    }
 }

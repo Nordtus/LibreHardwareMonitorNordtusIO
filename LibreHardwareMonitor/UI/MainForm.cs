@@ -10,7 +10,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Ports;
 using System.Linq;
+using System.Text; // Add this for manual JSON building
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Aga.Controls.Tree;
@@ -65,9 +67,73 @@ public sealed partial class MainForm : Form
     private UserRadioGroup _strokeThickness;
     private double _plotStrokeThickness = 2;
 
+    //-------------Start console---------------------
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool AllocConsole();
+    //-------------End console---------------------
+
+    SerialPort serialPort = new SerialPort();
+    private Dictionary<ISensor, CheckBox> sensorCheckboxes = new Dictionary<ISensor, CheckBox>();
+
+    // Add a key for persistent storage of the serial port server run state
+    private const string SerialPortServerRunKey = "runSerialPortServerMenuItem.Checked";
+
     public MainForm()
     {
         InitializeComponent();
+    //-------------Serial port ui selection box---------------------
+        treeView.MouseUp += TreeView_MouseUp;
+        var nodeComboBoxUiDisplay = new NodeComboBox
+        {
+            DataPropertyName = "UiDisplay",
+            ParentColumn = treeView.Columns[1],
+            EditEnabled = true
+        };
+
+        var nodeComboBoxUiElement = new NodeComboBox
+        {
+            DataPropertyName = "UiElement",
+            ParentColumn = treeView.Columns[1],
+            EditEnabled = true
+        };
+
+        // Attach visibility logic here
+        nodeComboBoxUiDisplay.IsVisibleValueNeeded += NodeComboBox_IsVisibleValueNeeded;
+        nodeComboBoxUiElement.IsVisibleValueNeeded += NodeComboBox_IsVisibleValueNeeded;
+
+        treeView.NodeControls.Add(nodeComboBoxUiDisplay);
+        treeView.NodeControls.Add(nodeComboBoxUiElement);
+
+        // Example: Add text items instead of numbers
+        for (int i = 1; i <= 10; i++)
+            nodeComboBoxUiDisplay.DropDownItems.Add($"Disp {i}");
+
+        for (int i = 1; i <= 10; i++)
+            nodeComboBoxUiElement.DropDownItems.Add($"El {i}");
+
+        // Add checkboxes for Min and Max columns
+
+        var nodeCheckBoxMin = new NodeCheckBox
+        {
+            DataPropertyName = "Min_select",    // was SerialMin
+            ParentColumn = treeView.Columns[2], // Min column
+            EditEnabled = true
+        };
+        nodeCheckBoxMin.IsVisibleValueNeeded += (s, e) =>
+            e.Value = e.Node.Tag is SensorNode && serialMenuItem.Checked;
+
+        var nodeCheckBoxMax = new NodeCheckBox
+        {
+            DataPropertyName = "Max_select",    // was SerialMax
+            ParentColumn = treeView.Columns[3], // Max column
+            EditEnabled = true
+        };
+        nodeCheckBoxMax.IsVisibleValueNeeded += (s, e) =>
+            e.Value = e.Node.Tag is SensorNode && serialMenuItem.Checked;
+
+        treeView.NodeControls.Add(nodeCheckBoxMin);
+        treeView.NodeControls.Add(nodeCheckBoxMax);
+    //-------------Serial port ui selection box end---------------------
 
         _settings = new PersistentSettings();
         _settings.Load(Path.ChangeExtension(Application.ExecutablePath, ".config"));
@@ -107,6 +173,7 @@ public sealed partial class MainForm : Form
         _plotPanel = new PlotPanel(_settings, _unitManager) { Font = SystemFonts.MessageBoxFont, Dock = DockStyle.Fill };
 
         nodeCheckBox.IsVisibleValueNeeded += NodeCheckBox_IsVisibleValueNeeded;
+        NodeCheckBoxSerial.IsVisibleValueNeeded += NodeCheckBoxSerial_IsVisibleValueNeeded;
         nodeTextBoxText.DrawText += NodeTextBoxText_DrawText;
         nodeTextBoxValue.DrawText += NodeTextBoxText_DrawText;
         nodeTextBoxMin.DrawText += NodeTextBoxText_DrawText;
@@ -320,6 +387,9 @@ public sealed partial class MainForm : Form
 
         authWebServerMenuItem.Checked = _settings.GetValue("authenticationEnabled", false);
 
+        serialPort.PortName = _settings.GetValue("serialPortPortName", serialPort.PortName);
+        serialPort.BaudRate = _settings.GetValue("serialPortBaudRate", serialPort.BaudRate);
+
         _logSensors = new UserOption("logSensorsMenuItem", false, logSensorsMenuItem, _settings);
 
         _loggingInterval = new UserRadioGroup("loggingInterval",
@@ -523,6 +593,11 @@ public sealed partial class MainForm : Form
         {
             Show();
         }
+
+        // Restore serial port server run state
+        bool runSerialPortServer = _settings.GetValue(SerialPortServerRunKey, false);
+        runSerialPortServerMenuItem.Checked = runSerialPortServer;
+        // This will trigger Serial_CheckBox_CheckedChanged and start the server if needed
 
         // Create a handle, otherwise calling Close() does not fire FormClosed
 
@@ -801,15 +876,155 @@ public sealed partial class MainForm : Form
     {
         HardwareNode hardwareNode = new(hardware, _settings, _unitManager);
         hardwareNode.PlotSelectionChanged += PlotSelectionChanged;
+        hardwareNode.SerialSelectionChanged += SerialSelectionChanged;
         InsertSorted(node.Nodes, hardwareNode);
         foreach (IHardware subHardware in hardware.SubHardware)
             SubHardwareAdded(subHardware, hardwareNode);
+    }
+
+    private bool isSerialPortServerRunning = false; // Track the server's running state
+
+    private void Serial_CheckBox_CheckedChanged(object sender, EventArgs e)
+    {
+        if (isSerialPortServerRunning)
+        {
+            // Stop the serial port server
+            StopSerialPortServer();
+        }
+        else
+        {
+            // Start the serial port server
+            StartSerialPortServer();
+        }
+
+        // Toggle the checkmark
+        ToolStripMenuItem menuItem = (ToolStripMenuItem)sender;
+        menuItem.Checked = isSerialPortServerRunning;
+    }
+
+    private bool isSerialPortDataSelectionActive = false;
+    private void Serial_Select_CheckBox_CheckedChanged(object sender, EventArgs e)
+    {
+        if (isSerialPortDataSelectionActive)
+        {
+            isSerialPortDataSelectionActive = false;
+        }
+        else
+        {
+            isSerialPortDataSelectionActive = true;
+        }
+
+        // Toggle the checkmark
+        ToolStripMenuItem menuItem = (ToolStripMenuItem)sender;
+        menuItem.Checked = isSerialPortDataSelectionActive;
+    }
+
+    private void StartSerialPortServer()
+    {
+        // Start the serial port server logic here
+        // You can enable your serial port server and perform necessary operations
+        // Update the isSerialPortServerRunning flag
+        string portName = serialPort.PortName;
+        try
+        {
+            if (!(serialPort.IsOpen))
+            {
+                serialPort.Open();
+                AllocConsole();
+                Console.Write(".");
+            }
+
+            isSerialPortServerRunning = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Handle the case where you don't have write access to the port
+
+            // Display an error message using a dialog box
+            MessageBox.Show($"You don't have write access to {portName}", "Port Access Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        catch (Exception ex)
+        {
+            // Handle other exceptions, such as port not found, etc.
+
+            // Display an error message using a dialog box
+            MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+    }
+
+    private void StopSerialPortServer()
+    {
+        // Stop the serial port server logic here
+        // You can disable your serial port server and perform necessary cleanup
+        // Update the isSerialPortServerRunning flag
+        serialPort.Close();
+        isSerialPortServerRunning = false;
+        serialPort.Dispose();
+    }
+
+    private int messageNumber = 0; // Declare a class-level variable to store the message number
+
+    private void SerialTestMessage()
+    {
+        try
+        {
+            //if (isSerialPortServerRunning)
+            //{
+            //    messageNumber++; // Increment the message number
+            //    string message = $"Tick {messageNumber}\r\n";
+
+            //    SendValueToSerialPort(message);
+
+            //    Console.WriteLine(message);
+            //    Debug.WriteLine(message);
+            //}
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Serial error: {ex.Message}");
+            Debug.WriteLine($"Serial error: {ex.Message}");
+            isSerialPortServerRunning = false;
+        }
+    }
+
+    private void SendValueToSerialPort(string value)
+    {
+        if (serialPort != null)
+        {
+            // Try to open the port if it's not open
+            if (!serialPort.IsOpen)
+            {
+                try
+                {
+                    serialPort.Open();
+                }
+                catch
+                {
+                    // Silently fail if port can't be opened
+                    return;
+                }
+            }
+
+            // Try to write to the port
+            try
+            {
+                serialPort.WriteLine(value);
+            }
+            catch
+            {
+                // Silently fail if write fails
+                // Optionally, you can close the port here to force a retry next time
+                try { serialPort.Close(); } catch { }
+            }
+        }
     }
 
     private void HardwareAdded(IHardware hardware)
     {
         SubHardwareAdded(hardware, _root);
         PlotSelectionChanged(this, null);
+        SerialSelectionChanged(this, null);
     }
 
     private void HardwareRemoved(IHardware hardware)
@@ -825,9 +1040,11 @@ public sealed partial class MainForm : Form
         {
             _root.Nodes.Remove(hardwareNode);
             hardwareNode.PlotSelectionChanged -= PlotSelectionChanged;
+            hardwareNode.SerialSelectionChanged -= SerialSelectionChanged;
         }
 
         PlotSelectionChanged(this, null);
+        SerialSelectionChanged(this, null);
     }
 
     private void NodeTextBoxText_DrawText(object sender, DrawEventArgs e)
@@ -909,6 +1126,22 @@ public sealed partial class MainForm : Form
         _plotPanel.SetSensors(selected, colors, _plotStrokeThickness);
     }
 
+    private void SerialSelectionChanged(object sender, EventArgs e)
+    {
+        List<ISensor> selected = new();
+
+        foreach (TreeNodeAdv node in treeView.AllNodes)
+        {
+            if (node.Tag is SensorNode sensorNode)
+            {
+                if (sensorNode.Serial)
+                {
+                    selected.Add(sensorNode.Sensor);
+                }
+            }
+        }
+    }
+
     private void NodeTextBoxText_EditorShowing(object sender, CancelEventArgs e)
     {
         e.Cancel = !(treeView.CurrentNode != null && (treeView.CurrentNode.Tag is SensorNode || treeView.CurrentNode.Tag is HardwareNode));
@@ -917,6 +1150,11 @@ public sealed partial class MainForm : Form
     private void NodeCheckBox_IsVisibleValueNeeded(object sender, NodeControlValueEventArgs e)
     {
         e.Value = e.Node.Tag is SensorNode && plotMenuItem.Checked;
+    }
+
+    private void NodeCheckBoxSerial_IsVisibleValueNeeded(object sender, NodeControlValueEventArgs e)
+    {
+        e.Value = e.Node.Tag is SensorNode && serialMenuItem.Checked;
     }
 
     private void ExitClick(object sender, EventArgs e)
@@ -929,9 +1167,141 @@ public sealed partial class MainForm : Form
         treeView.Invalidate();
         _systemTray.Redraw();
         _gadget?.Redraw();
+     
+
+        // --- Serial output for checked sensors, grouped as JSON ---
+        if (isSerialPortServerRunning)
+        {
+            // Build nested dictionary: Hardware -> Category -> Sensor -> Value
+            var hardwareData = new Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<string, string>>>>();
+
+            foreach (TreeNodeAdv node in treeView.AllNodes)
+            {
+                if (node.Tag is SensorNode tag && tag.Serial)
+                {
+                    string hardware = tag.Parent?.Parent?.Text ?? "";
+                    string category = tag.Parent?.Text ?? "";
+                    string sensor = tag.Text ?? "";
+                    string value = tag.Value ?? "";
+                    string min = tag.SerialMin ? (tag.Min ?? "") : "";
+                    string max = tag.SerialMax ? (tag.Max ?? "") : "";
+                    string uiElement = tag.UiElement ?? "";
+                    string uiDisplay = tag.UiDisplay ?? "";
+
+                    if (string.IsNullOrEmpty(hardware) || string.IsNullOrEmpty(category) || string.IsNullOrEmpty(sensor))
+                        continue;
+
+                    if (!hardwareData.TryGetValue(hardware, out var categoryDict))
+                    {
+                        categoryDict = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>();
+                        hardwareData[hardware] = categoryDict;
+                    }
+
+                    if (!categoryDict.TryGetValue(category, out var sensorDict))
+                    {
+                        sensorDict = new Dictionary<string, Dictionary<string, string>>();
+                        categoryDict[category] = sensorDict;
+                    }
+
+                    // Add UiDisplay and UiElement to JSON
+                    sensorDict[sensor] = new Dictionary<string, string>
+                    {
+                        { "ui_Display", tag.UiDisplay },
+                        { "ui_Element", tag.UiElement },
+                        { "value", value },
+                        { "min", min },
+                        { "max", max }
+                    };
+
+                }
+            }
+
+            // Serialize to JSON (manual, to avoid dependencies)
+            string json = BuildJson(hardwareData);
+
+            SendValueToSerialPort(json + "\r\n");
+            Console.WriteLine(json);
+            Debug.WriteLine(json);
+        }
+
+        //FOR DEBUGGING
+        SerialTestMessage();
 
         if (!backgroundUpdater.IsBusy)
             backgroundUpdater.RunWorkerAsync();
+
+        //RestoreCollapsedNodeState(treeView);
+    }
+
+    private string BuildJson(Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<string, string>>>> hardwareDict)
+    {
+        var sb = new StringBuilder();
+        sb.Append("{");
+        bool firstHardware = true;
+
+        foreach (var hw in hardwareDict)
+        {
+            if (!firstHardware) sb.Append(",");
+            firstHardware = false;
+            sb.Append($"\"{EscapeJson(hw.Key)}\":{{");
+
+            bool firstCategory = true;
+            foreach (var cat in hw.Value)
+            {
+                if (!firstCategory) sb.Append(",");
+                firstCategory = false;
+                sb.Append($"\"{EscapeJson(cat.Key)}\":{{");
+
+                bool firstSensor = true;
+                foreach (var sensor in cat.Value)
+                {
+                    if (!firstSensor) sb.Append(",");
+                    firstSensor = false;
+
+                    var sensorValues = sensor.Value;
+                    string uiDisplay = sensorValues.ContainsKey("ui_Display") ? sensorValues["ui_Display"] : "";
+                    string uiElement = sensorValues.ContainsKey("ui_Element") ? sensorValues["ui_Element"] : "";
+                    string value = sensorValues.ContainsKey("value") ? sensorValues["value"] : "";
+                    string min = sensorValues.ContainsKey("min") ? sensorValues["min"] : "";
+                    string max = sensorValues.ContainsKey("max") ? sensorValues["max"] : "";
+
+                    // Strip "Disp " and "El " prefixes
+                    if (uiDisplay.StartsWith("Disp "))
+                        uiDisplay = uiDisplay.Replace("Disp ", "");
+                    if (uiElement.StartsWith("El "))
+                        uiElement = uiElement.Replace("El ", "");
+
+                    sb.Append($"\"{EscapeJson(sensor.Key)}\":{{" +
+                              $"\"uiDisp\":\"{EscapeJson(uiDisplay)}\"," +
+                              $"\"uiElem\":\"{EscapeJson(uiElement)}\"," +
+                              $"\"val\":\"{EscapeJson(value)}\"");
+
+                    if (!string.IsNullOrEmpty(min))
+                        sb.Append($",\"min\":\"{EscapeJson(min)}\"");
+                    if (!string.IsNullOrEmpty(max))
+                        sb.Append($",\"max\":\"{EscapeJson(max)}\"");
+
+                    sb.Append("}");
+
+                }
+
+
+                sb.Append("}");
+            }
+
+            sb.Append("}");
+        }
+
+        sb.Append("}");
+        sb.Append("\n"); // <-- add newline terminator
+        sb.Append('\0');
+        return sb.ToString();
+    }
+
+    private string EscapeJson(string s)
+    {
+        if (s == null) return "";
+        return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 
     private void SaveConfiguration()
@@ -949,6 +1319,12 @@ public sealed partial class MainForm : Form
         _settings.SetValue("authenticationEnabled", Server.AuthEnabled);
         _settings.SetValue("authenticationUserName", Server.UserName);
         _settings.SetValue("authenticationPassword", Server.Password);
+
+        _settings.SetValue("serialPortPortName", serialPort.PortName);
+        _settings.SetValue("serialPortBaudRate", serialPort.BaudRate);
+
+        // Save the serial port server run state
+        _settings.SetValue(SerialPortServerRunKey, runSerialPortServerMenuItem.Checked);
 
         string fileName = Path.ChangeExtension(Application.ExecutablePath, ".config");
 
@@ -1035,6 +1411,7 @@ public sealed partial class MainForm : Form
         _systemTray.Dispose();
         timer.Dispose();
         backgroundUpdater.Dispose();
+        StopSerialPortServer();
 
         Application.Exit();
     }
@@ -1342,17 +1719,6 @@ public sealed partial class MainForm : Form
         _selectionDragging = false;
     }
 
-    private void TreeView_SizeChanged(object sender, EventArgs e)
-    {
-        int newWidth = treeView.Width;
-        for (int i = 1; i < treeView.Columns.Count; i++)
-        {
-            if (treeView.Columns[i].IsVisible)
-                newWidth -= treeView.Columns[i].Width;
-        }
-        treeView.Columns[0].Width = newWidth;
-    }
-
     private void TreeView_KeyDown(object sender, KeyEventArgs e)
     {
         if (treeView.SelectedNode != null)
@@ -1394,7 +1760,62 @@ public sealed partial class MainForm : Form
             treeView.Columns[nextColumnIndex].Width = Math.Max(20, treeView.Columns[nextColumnIndex].Width + diff);
         }
     }
+private void ServerPortMenuItem_Click(object sender, EventArgs e)
+    {
+        new PortForm(this).ShowDialog();
+    }
 
+    private void serialPortMenuItem_Click(object sender, EventArgs e)
+    {
+        // Create an instance of SerialPortBox and pass the MainForm instance
+        SerialPortBox serialPortForm = new SerialPortBox(this);
+
+        // Show the SerialPortBox dialog as a modal dialog
+        DialogResult result = serialPortForm.ShowDialog();
+
+        if (result == DialogResult.OK)
+        {
+            // Retrieve the selected COM port and speed
+            string selectedPort = serialPortForm.SelectedComPort;
+            string selectedSpeed = serialPortForm.SelectedComPortSpeed;
+
+            // Now you can assign the selected COM port to serialPort.PortName
+            serialPort.PortName = selectedPort;
+            serialPort.BaudRate = int.Parse(selectedSpeed);
+        }
+    }
+
+    private void ShowSerialPortSettings()
+    {
+        SerialPortBox serialPortForm = new SerialPortBox(this); // Pass the MainForm instance if needed
+        serialPortForm.ShowDialog();
+
+        // Access the selected COM port
+        string selectedPort = serialPortForm.SelectedComPort;
+    }
+
+    private void TreeView_SizeChanged(object sender, EventArgs e)
+    {
+        int newWidth = treeView.Width;
+        for (int i = 1; i < treeView.Columns.Count; i++)
+        {
+            if (treeView.Columns[i].IsVisible)
+                newWidth -= treeView.Columns[i].Width;
+        }
+        treeView.Columns[0].Width = newWidth;
+    }
+    private void NodeComboBox_IsVisibleValueNeeded(object sender, NodeControlValueEventArgs e)
+    {
+        e.Value = e.Node.Tag is SensorNode && serialMenuItem.Checked;
+    }
+
+    private void NodeComboBox_IsVisibleValueNeeded(object sender, NodeControlIsVisibleValueNeededEventArgs e)
+    {
+        if (e.Node.Tag is SensorNode sn)
+            e.IsVisible = serialMenuItem.Checked && sn.Serial;
+        else
+            e.IsVisible = false;
+    }
     private void ServerInterfacePortMenuItem_Click(object sender, EventArgs e)
     {
         new InterfacePortForm(this).ShowDialog();
